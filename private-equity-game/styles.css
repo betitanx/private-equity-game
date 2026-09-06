@@ -23,6 +23,51 @@
   box-sizing: border-box;
 }
 
+.entry-shell { min-height: 100svh; background: #071014; }
+.campaign-stats { padding: 20px 0; border-block: 1px solid var(--line); }
+.campaign-offers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.campaign-offers .metric-line { flex-wrap: wrap; gap: 8px; }
+.campaign-offers button { width: 100%; margin-top: 16px; }
+.campaign-results { padding-left: 20px; }
+.campaign-results li { padding: 8px 0; }
+.entry-page { width: min(100%, 800px); margin: 0 auto; padding: 48px 24px; }
+.entry-home { min-height: 100svh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+.entry-brand { width: 72px; height: 72px; display: grid; place-items: center; background: var(--teal); color: #071014; font-size: 28px; font-weight: 800; border-radius: 8px; margin-bottom: 24px; }
+.entry-home h1 { font-size: 56px; line-height: 1.1; margin: 0; letter-spacing: 0; overflow-wrap: anywhere; }
+.entry-intro { font-size: 18px; color: var(--muted); max-width: 440px; margin: 24px 0 32px; }
+.entry-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.entry-actions button, .entry-rules > button { min-height: 48px; padding: 12px 22px; }
+.entry-home .entry-actions { justify-content: center; }
+.saved-fund { color: var(--muted); margin-top: 28px; overflow-wrap: anywhere; max-width: 100%; }
+.entry-back { margin-bottom: 24px; }
+.entry-page h1 { letter-spacing: 0; }
+.entry-form h1, .entry-rules h1 { font-size: 32px; margin: 0 0 32px; }
+.entry-form form > label { display: block; font-weight: 700; margin-bottom: 10px; }
+.entry-form #fund-name { width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
+.entry-form fieldset { border: 0; padding: 0; margin: 28px 0; min-width: 0; }
+.entry-form legend { font-weight: 700; margin-bottom: 12px; }
+.thesis-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.thesis-option { display: flex; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.thesis-option:has(input:checked) { border-color: var(--teal); background: var(--panel-2); }
+.thesis-option input { accent-color: var(--teal); margin: 4px 0 0; align-self: flex-start; flex-shrink: 0; }
+.thesis-option span { min-width: 0; overflow-wrap: anywhere; }
+.thesis-option strong, .thesis-option span span, .thesis-option small { display: block; }
+.thesis-option span span { color: var(--muted); margin-top: 8px; }
+.thesis-option small { color: var(--muted); margin-top: 12px; }
+.rules-list { padding-left: 24px; }
+.rules-list li { padding: 0 0 16px 8px; }
+.rules-list h2 { font-size: 18px; margin: 0 0 8px; }
+.rules-list p, .rules-goal { color: var(--muted); margin-top: 0; }
+.rules-goal { border-top: 1px solid var(--line); padding-top: 20px; margin-bottom: 24px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 4px; }
+.fund-stat strong { overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .entry-page { padding: 32px 20px; }
+  .entry-home h1 { font-size: 42px; }
+  .thesis-options { grid-template-columns: minmax(0, 1fr); }
+  .entry-home .entry-actions { width: 100%; flex-direction: column; }
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -334,6 +379,12 @@ button:disabled {
   background: rgba(255, 109, 100, 0.12);
 }
 
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .stats {
   display: grid;
   gap: 8px;
@@ -425,6 +476,16 @@ input[type="range"] {
   margin-bottom: 14px;
 }
 
+.thesis-panel {
+  margin-bottom: 14px;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(260px, 1.4fr) minmax(220px, 0.8fr);
@@ -477,6 +538,19 @@ input[type="range"] {
   display: grid;
   gap: 12px;
   align-content: center;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.decision-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.decision-grid button {
+  text-align: left;
 }
 
 .table {

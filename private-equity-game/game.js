@@ -65,12 +65,36 @@ const lpPrograms = [
   { id: "sovereign", name: "Soberanos e endowments", target: 520, difficulty: 76, reputation: 4.2 },
 ];
 
+const fundTheses = [
+  { id: "buyout", name: "Buyout defensivo", sectors: ["Agronegócio", "Saúde", "Logística", "Educação"], risk: -5, growth: -2, lp: 8, bank: 8, text: "Ativos rentáveis e menor volatilidade." },
+  { id: "growth", name: "Growth equity", sectors: ["Tecnologia", "IA aplicada", "Healthtech", "Data centers"], risk: 3, growth: 7, lp: 4, bank: -2, text: "Crescimento com uso moderado de dívida." },
+  { id: "frontier", name: "Fronteira tecnológica", sectors: ["IA aplicada", "Biotech", "Healthtech"], risk: 10, growth: 16, lp: -2, bank: -8, text: "Alto risco e grande potencial de valorização." },
+  { id: "infra", name: "Infraestrutura digital", sectors: ["Data centers", "Logística", "Tecnologia"], risk: -1, growth: 5, lp: 6, bank: 5, text: "Contratos longos e expansão de capacidade." },
+];
+
 const events = [
   { title: "Selic caiu 0,75 p.p.", text: "Mercado de dívida ficou mais receptivo. Custo financeiro recua neste trimestre.", cash: 0, risk: -4, debtRate: -0.5 },
   { title: "Concorrência em leilões aumentou", text: "Múltiplos de entrada subiram e deals competitivos ficaram mais caros.", multiple: 0.35, risk: 3 },
   { title: "LP âncora pediu mais transparência", text: "Fundos com portal e boa reputação captam melhor. Sem isso, a régua sobe.", lp: -6, risk: 2 },
   { title: "Choque de demanda setorial", text: "Empresas com risco alto sofrem queda de receita. Operação forte limita o dano.", growth: -2.2, risk: 7 },
   { title: "Janela de IPO abriu", text: "Companhias maduras e com bom crescimento recebem prêmio de saída.", exitBonus: 0.45, risk: -2 },
+];
+
+const sectorEvents = [
+  { sector: "IA aplicada", title: "Demanda por IA acelerou", growth: 9, multiple: 0.55, risk: 3 },
+  { sector: "Biotech", title: "Regulador exigiu novos estudos", growth: -8, multiple: -0.7, risk: 9 },
+  { sector: "Data centers", title: "Contratos de capacidade fecharam", growth: 6, multiple: 0.35, risk: -2 },
+  { sector: "Varejo", title: "Consumo desacelerou", growth: -4, multiple: -0.25, risk: 4 },
+  { sector: "Saúde", title: "M&A em saúde aqueceu", growth: 3, multiple: 0.28, risk: -1 },
+  { sector: "Agronegócio", title: "Safra forte elevou demanda", growth: 4, multiple: 0.18, risk: -2 },
+];
+
+const boardDecisions = [
+  { id: "cash", name: "Preservar caixa", cash: 42, growth: -1, margin: 0, risk: -2, reputation: 0 },
+  { id: "growth", name: "Acelerar crescimento", cash: -36, growth: 5, margin: -0.2, risk: 4, reputation: 0.04 },
+  { id: "delever", name: "Reduzir alavancagem", cash: -20, growth: -1, margin: 0.4, risk: -6, reputation: 0.03 },
+  { id: "talent", name: "Trocar executivos", cash: -28, growth: 2, margin: 0.9, risk: -3, reputation: 0.05 },
+  { id: "rnd", name: "Investir em P&D", cash: -44, growth: 7, margin: -0.5, risk: 6, reputation: 0.02 },
 ];
 
 const expansionIdeas = [
@@ -87,7 +111,9 @@ const expansionIdeas = [
 ];
 
 const initialState = {
-  version: 3,
+  version: 4,
+  started: false,
+  fundraising: null,
   tab: "mercado",
   quarter: 1,
   year: 2027,
@@ -101,7 +127,12 @@ const initialState = {
   distributions: 0,
   covenantWarnings: 0,
   lpMomentum: 0,
+  thesis: "buyout",
+  reputations: { lps: 3.1, banks: 3.1, founders: 3.1, public: 3.1 },
   dealDrafts: {},
+  diligence: {},
+  pendingDecision: null,
+  exits: [],
   navHistory: [{ label: "2027 T1", value: 650 }],
   team: [],
   infra: [],
@@ -113,6 +144,158 @@ const initialState = {
 };
 
 let state = loadState();
+let screen = "home";
+let rulesReturn = "home";
+let setupDraft = { name: "", thesis: "buyout" };
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+}
+
+function showScreen(next) {
+  screen = next === "game" && state.fundraising && !state.fundraising.closed ? "fundraising" : next;
+  render();
+  document.querySelector("main h1, main h2")?.focus();
+  window.scrollTo(0, 0);
+}
+
+function showRules() {
+  rulesReturn = screen;
+  showScreen("rules");
+}
+
+function startFund(event) {
+  event.preventDefault();
+  const input = document.querySelector("#fund-name");
+  const name = input.value.trim();
+  input.setCustomValidity(name ? "" : "Informe o nome do fundo.");
+  if (!input.reportValidity()) return;
+  if (!fundTheses.some((thesis) => thesis.id === setupDraft.thesis)) return;
+  state = clone(initialState);
+  state.started = true;
+  state.fundName = name.slice(0, 60);
+  state.thesis = setupDraft.thesis;
+  state.cash = 0;
+  state.called = 0;
+  const anchor = 300 + Math.floor(Math.random() * 201);
+  const climate = ["Restritivo", "Seletivo", "Receptivo"][Math.floor(Math.random() * 3)];
+  const appetite = { Restritivo: -0.12, Seletivo: 0, Receptivo: 0.1 }[climate];
+  const preferences = { family: ["growth", "frontier"], pension: ["buyout", "infra"], sovereign: ["infra", "frontier"] };
+  state.committed = anchor;
+  state.navHistory = [];
+  state.log = [`LP âncora comprometeu ${money(anchor)}. Captação inicial aberta.`];
+  state.fundraising = {
+    closed: false, climate, round: 0, anchor, results: [],
+    rounds: Array.from({ length: 4 }, () => lpPrograms.map((lp) => {
+      const fit = preferences[lp.id].includes(state.thesis);
+      const chance = clamp(({ family: 0.8, pension: 0.6, sovereign: 0.4 }[lp.id]) + appetite + (fit ? 0.12 : -0.06), 0.2, 0.95);
+      const amount = Math.round(lp.target * (0.65 + Math.random() * 0.65));
+      return { id: lp.id, name: lp.name, fit, chance, amount, accepted: Math.random() < chance };
+    })),
+  };
+  saveState();
+  showScreen("fundraising");
+}
+
+function pitchInitialLP(round, id) {
+  const campaign = state.fundraising;
+  if (!campaign || campaign.closed || round !== campaign.round || round >= 4) return;
+  const offer = campaign.rounds[round].find((item) => item.id === id);
+  if (!offer) return;
+  const amount = offer.accepted ? offer.amount : 0;
+  state.committed += amount;
+  campaign.results.push({ name: offer.name, amount });
+  campaign.round += 1;
+  log(`${offer.name}: ${amount ? `${money(amount)} comprometidos` : "proposta recusada"}.`);
+  saveState();
+  render();
+}
+
+function closeInitialFund() {
+  const campaign = state.fundraising;
+  if (!campaign || campaign.closed || campaign.round !== 4) return;
+  campaign.closed = true;
+  state.called = Math.round(state.committed * 0.4);
+  state.cash = state.called;
+  state.navHistory = [{ label: "2027 T1", value: state.cash }];
+  log(`Fundo iniciado com ${money(state.cash)} em caixa e ${money(state.committed)} comprometidos. Chamada inicial de 40%.`);
+  showScreen("game");
+}
+
+function renderFundraising() {
+  const campaign = state.fundraising;
+  const finished = campaign.round === 4;
+  return `<main class="entry-page">
+    <button class="entry-back" onclick="showScreen('home')">Voltar ao início</button>
+    <h1 tabindex="-1">${finished ? "Fechamento do fundo" : "Captação inicial"}</h1>
+    <p>${escapeHtml(state.fundName)} · ${currentThesis().name}</p>
+    <div class="stats campaign-stats">
+      <div><span>Mercado</span><strong>${campaign.climate}</strong></div>
+      <div><span>Rodadas concluídas</span><strong>${campaign.round} / 4</strong></div>
+      <div><span>Capital comprometido</span><strong>${money(state.committed)}</strong></div>
+      <div><span>Caixa no fechamento (40%)</span><strong>${money(Math.round(state.committed * 0.4))}</strong></div>
+    </div>
+    ${finished ? `<p>O restante do capital poderá ser chamado na área de LPs.</p><button class="primary" onclick="closeInitialFund()">Fechar fundo e iniciar gestão</button>` : `
+      <h2>Rodada ${campaign.round + 1}: escolha um LP</h2>
+      <p>Cada rodada permite uma abordagem. A proposta pode ser recusada; compromissos só viram caixa na chamada de capital.</p>
+      <div class="campaign-offers">${campaign.rounds[campaign.round].map((offer) => `<article class="action-card">
+        <h3>${offer.name}</h3>
+        <div class="metric-line"><span>Compromisso proposto</span><strong>${money(offer.amount)}</strong></div>
+        <div class="metric-line"><span>Chance de aceite</span><strong>${pct(offer.chance * 100)}</strong></div>
+        <div class="metric-line"><span>Aderência à tese</span><strong>${offer.fit ? "Alta" : "Moderada"}</strong></div>
+        <button onclick="pitchInitialLP(${campaign.round}, '${offer.id}')">Apresentar proposta</button>
+      </article>`).join("")}</div>`}
+    <h2>Compromissos e respostas</h2>
+    <ul class="campaign-results" aria-live="polite"><li>LP âncora: ${money(campaign.anchor)}</li>${campaign.results.map((result, i) => `<li>Rodada ${i + 1} · ${result.name}: <strong>${result.amount ? money(result.amount) : "Proposta recusada"}</strong></li>`).join("")}</ul>
+  </main>`;
+}
+
+function renderWelcome() {
+  if (screen === "fundraising") return renderFundraising();
+  if (screen === "setup") return `
+    <main class="entry-page entry-form">
+      <button class="entry-back" onclick="showScreen('home')">Voltar ao início</button>
+      <h1 tabindex="-1">Crie seu fundo</h1>
+      <form onsubmit="startFund(event)">
+        <label for="fund-name">Nome do fundo</label>
+        <input id="fund-name" name="fundName" required maxlength="60" autocomplete="off" value="${escapeHtml(setupDraft.name)}" oninput="setupDraft.name = this.value; this.setCustomValidity('')">
+        <fieldset><legend>Tese principal</legend>
+          <div class="thesis-options">${fundTheses.map((thesis) => `
+            <label class="thesis-option"><input type="radio" name="thesis" value="${thesis.id}" ${setupDraft.thesis === thesis.id ? "checked" : ""} onchange="setupDraft.thesis = this.value">
+              <span><strong>${thesis.name}</strong><span>${thesis.text}</span><small>${thesis.sectors.join(" · ")}</small></span>
+            </label>`).join("")}</div>
+        </fieldset>
+        ${state.started ? '<p class="warn">Ao iniciar, a partida salva será substituída.</p>' : ""}
+        <div class="entry-actions"><button class="primary" type="submit">Iniciar captação</button><button type="button" onclick="showRules()">Ler regras</button></div>
+      </form>
+    </main>`;
+  if (screen === "rules") return `
+    <main class="entry-page entry-rules">
+      <button class="entry-back" onclick="showScreen(rulesReturn)">Voltar</button>
+      <h1 tabindex="-1">Como jogar</h1>
+      <ol class="rules-list">
+        <li><h2>Monte o fundo</h2><p>Escolha um nome e uma tese. Um LP âncora compromete entre R$ 300 e R$ 500 milhões. Em quatro rodadas, escolha investidores para abordar: tese e mercado afetam as chances de aceite. No fechamento, 40% do capital captado entra no caixa; o restante pode ser chamado na área de LPs. Atualizar a página mantém as propostas e os resultados da captação.</p></li>
+        <li><h2>Compre empresas</h2><p>No Mercado, compare preço, crescimento e risco. Faça due diligence para investigar o negócio e escolha quanto financiar com capital próprio ou dívida de aquisição (LBO). Empresas aderentes à tese recebem seus efeitos.</p></li>
+        <li><h2>Crie valor</h2><p>Contrate especialistas em Equipe, invista em Infraestrutura e aplique melhorias nas investidas. Em Operações, combine empresas por M&A e administre o capital.</p></li>
+        <li><h2>Cuide da liquidez</h2><p>Capte com LPs, chame capital comprometido ou contrate empréstimos. Salários, investimentos e juros consomem caixa. A dívida do fundo e a dívida das aquisições entram no risco total.</p></li>
+        <li><h2>Avance os trimestres</h2><p>Cada avanço aplica resultados operacionais e eventos de mercado. Resolva a decisão pendente do conselho antes de avançar novamente. Três alertas de covenants por alavancagem ou liquidez crítica encerram a partida.</p></li>
+        <li><h2>Realize os retornos</h2><p>Venda participações, prepare empresas para IPO ou faça vendas posteriores após o lock-up. Os botões são liberados conforme os requisitos de cada operação. Acompanhe NAV, retornos e distribuições no Relatório.</p></li>
+      </ol>
+      <p class="rules-goal">A partir de 2036, alcance IRR bruto de pelo menos 18% e reputação de pelo menos 4 para concluir o mandato com sucesso.</p>
+      <button class="primary" onclick="showScreen(rulesReturn === 'home' ? 'setup' : rulesReturn)">${rulesReturn === "home" ? "Criar meu fundo" : "Voltar"}</button>
+    </main>`;
+  return `<main class="entry-page entry-home">
+    <div class="entry-brand" aria-hidden="true">PE</div>
+    <h1 tabindex="-1">PE Strategy</h1>
+    <p class="entry-intro">Construa seu fundo. Transforme empresas. Gere retornos.</p>
+    <div class="entry-actions">
+      ${state.started ? '<button class="primary" onclick="showScreen(\'game\')">Continuar partida</button>' : ""}
+      <button ${state.started ? "" : 'class="primary"'} onclick="showScreen('setup')">${state.started ? "Nova partida" : "Iniciar jogo"}</button>
+      <button onclick="showRules()">Ler regras</button>
+    </div>
+    ${state.started ? `<p class="saved-fund">${escapeHtml(state.fundName)} · ${state.year} · ${state.quarter}º trimestre</p>` : ""}
+  </main>`;
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -131,11 +314,12 @@ function normalizeState(saved) {
   if (!saved || typeof saved !== "object") {
     return clone(initialState);
   }
-  if (saved.version !== 3 && (!Array.isArray(saved.portfolio) || saved.portfolio.length === 0)) {
+  if (saved.version < 3 && (!Array.isArray(saved.portfolio) || saved.portfolio.length === 0)) {
     return clone(initialState);
   }
   const next = { ...clone(initialState), ...saved };
-  next.version = 3;
+  next.started = typeof saved.started === "boolean" ? saved.started : true;
+  next.version = 4;
   next.team = Array.isArray(saved.team) ? saved.team : [];
   next.infra = Array.isArray(saved.infra) ? saved.infra : [];
   next.market = Array.isArray(saved.market) ? saved.market : clone(marketSeed);
@@ -148,7 +332,15 @@ function normalizeState(saved) {
   next.reputation = Number.isFinite(saved.reputation) ? saved.reputation : initialState.reputation;
   next.covenantWarnings = Number.isFinite(saved.covenantWarnings) ? saved.covenantWarnings : 0;
   next.lpMomentum = Number.isFinite(saved.lpMomentum) ? saved.lpMomentum : 0;
+  next.thesis = fundTheses.some((item) => item.id === saved.thesis) ? saved.thesis : initialState.thesis;
+  next.reputations = {
+    ...clone(initialState.reputations),
+    ...(saved.reputations && typeof saved.reputations === "object" ? saved.reputations : {}),
+  };
   next.dealDrafts = saved.dealDrafts && typeof saved.dealDrafts === "object" ? saved.dealDrafts : {};
+  next.diligence = saved.diligence && typeof saved.diligence === "object" ? saved.diligence : {};
+  next.pendingDecision = saved.pendingDecision || null;
+  next.exits = Array.isArray(saved.exits) ? saved.exits : [];
   next.navHistory = Array.isArray(saved.navHistory) && saved.navHistory.length
     ? saved.navHistory
     : [{ label: `${next.year || initialState.year} T${next.quarter || initialState.quarter}`, value: Math.max(0, (next.cash || 0) + portfolioValueFrom(next.portfolio || []) - (next.debt || 0)) }];
@@ -161,6 +353,9 @@ function normalizeState(saved) {
     public: false,
     publicFloat: 0,
     ipoPrice: 0,
+    ipoPrepared: false,
+    lockup: 0,
+    executives: [],
     ...company,
   }));
   return next;
@@ -226,6 +421,41 @@ function availableCommitment() {
   return Math.max(0, state.committed - state.called);
 }
 
+function currentThesis() {
+  return fundTheses.find((item) => item.id === state.thesis) || fundTheses[0];
+}
+
+function thesisFit(company) {
+  return currentThesis().sectors.includes(company.sector);
+}
+
+function reputation(key = "lps") {
+  return state.reputations?.[key] ?? state.reputation;
+}
+
+function adjustReputation(key, delta) {
+  state.reputations = { ...clone(initialState.reputations), ...(state.reputations || {}) };
+  state.reputations[key] = clamp(state.reputations[key] + delta, 1, 5);
+  state.reputation = Object.values(state.reputations).reduce((sum, value) => sum + value, 0) / 4;
+}
+
+function dpi() {
+  return state.distributions / Math.max(1, state.called);
+}
+
+function tvpi() {
+  return (nav() + state.distributions) / Math.max(1, state.called);
+}
+
+function carryAccrued() {
+  const profit = nav() + state.distributions - state.called * 1.08;
+  return Math.max(0, profit * 0.2);
+}
+
+function diligenceStatus(companyId) {
+  return state.diligence?.[companyId] || { level: 0, hiddenRisk: null, priceInsight: 0 };
+}
+
 function nav() {
   return Math.max(0, state.cash + portfolioValue() - state.debt);
 }
@@ -251,6 +481,69 @@ function setTab(tab) {
   render();
 }
 
+function setThesis(id) {
+  if (!fundTheses.some((item) => item.id === id)) return;
+  state.thesis = id;
+  log(`Tese do fundo ajustada para ${currentThesis().name}.`);
+  render();
+}
+
+function runDiligence(companyId) {
+  const company = state.market.find((item) => item.id === companyId);
+  if (!company) return;
+  const current = diligenceStatus(companyId);
+  const cost = 10 + current.level * 7;
+  if (!canAfford(cost)) {
+    log(`Caixa insuficiente para diligência em ${company.name}.`);
+    render();
+    return;
+  }
+  state.cash -= cost;
+  const hiddenRisk = current.hiddenRisk ?? Math.round((Math.random() - 0.35) * company.risk / 4);
+  const priceInsight = clamp((company.quality - 68) / 18 - hiddenRisk / 20, -0.08, 0.08);
+  state.diligence = {
+    ...state.diligence,
+    [companyId]: {
+      level: Math.min(3, current.level + 1),
+      hiddenRisk,
+      priceInsight,
+    },
+  };
+  adjustReputation("founders", company.status === "Proprietário" ? 0.03 : -0.01);
+  log(`Diligência concluída em ${company.name}: risco oculto ${hiddenRisk >= 0 ? "+" : ""}${hiddenRisk} pts, ajuste de preço ${pct(priceInsight * 100)}.`);
+  render();
+}
+
+function chooseBoardDecision(id) {
+  const decision = boardDecisions.find((item) => item.id === id);
+  if (!decision || !state.pendingDecision) return;
+  const company = state.portfolio.find((item) => item.id === state.pendingDecision.companyId);
+  const cashCost = Math.abs(Math.min(0, decision.cash));
+  if (cashCost > 0 && !canAfford(cashCost)) {
+    log(`Caixa insuficiente para ${decision.name}.`);
+    render();
+    return;
+  }
+  state.cash += decision.cash;
+  if (company) {
+    company.growth = Math.max(0, company.growth + decision.growth);
+    company.ebitdaMargin = Math.max(4, company.ebitdaMargin + decision.margin);
+    company.risk = clamp(company.risk + decision.risk, 5, 90);
+    if (decision.id === "delever" && company.dealDebt > 0) {
+      const amount = Math.min(company.dealDebt, 55);
+      company.dealDebt -= amount;
+      state.cash -= Math.min(state.cash, Math.max(0, amount * 0.18));
+    }
+    if (decision.id === "talent") {
+      company.executives = [...(company.executives || []), "Executivo contratado"].slice(-3);
+    }
+  }
+  adjustReputation("founders", decision.reputation);
+  state.pendingDecision = null;
+  log(`Board decidiu: ${decision.name}${company ? ` em ${company.name}` : ""}.`);
+  render();
+}
+
 function getDealDebtPct(company) {
   const saved = Number(state.dealDrafts?.[company.id]);
   if (Number.isFinite(saved)) return clamp(saved, 0, 70);
@@ -269,11 +562,14 @@ function dealTerms(company, debtPct = getDealDebtPct(company)) {
   const rawDebtPct = legacyStructure ? legacyStructure.debtPct : Number(debtPct);
   const finalDebtPct = clamp(Number.isFinite(rawDebtPct) ? rawDebtPct : getDealDebtPct(company), 0, 70);
   const stake = finalDebtPct >= 58 ? 78 : 72;
-  const purchasePrice = enterpriseValue(company) * stake / 100;
+  const diligence = diligenceStatus(company.id);
+  const competition = (company.competition ?? (company.status === "Competitivo" ? 0.08 : company.status === "Leilão" ? 0.05 : 0));
+  const thesisDiscount = thesisFit(company) ? -0.025 : 0.035;
+  const purchasePrice = enterpriseValue(company) * (1 + competition + thesisDiscount - diligence.priceInsight) * stake / 100;
   const dealDebt = purchasePrice * finalDebtPct / 100;
   const equityCheck = purchasePrice - dealDebt;
   const leverage = dealDebt / Math.max(1, ebitda(company));
-  const rate = finalDebtPct === 0 ? 0 : 8.7 + finalDebtPct * 0.082 + Math.max(0, company.risk - 35) * 0.045;
+  const rate = finalDebtPct === 0 ? 0 : 8.7 + finalDebtPct * 0.082 + Math.max(0, company.risk - 35) * 0.045 - (reputation("banks") - 3) * 0.55;
   const risk = finalDebtPct === 0 ? -4 : Math.round(finalDebtPct / 5 + Math.max(0, company.risk - 45) / 5);
   const name = finalDebtPct === 0 ? "Equity majoritário" : finalDebtPct >= 58 ? "LBO agressivo customizado" : "LBO customizado";
   return { structure: { id: "custom", name, debtPct: finalDebtPct, stake, rate, risk }, purchasePrice, dealDebt, equityCheck, leverage };
@@ -306,11 +602,13 @@ function buyCompany(id, debtPct) {
     structure: terms.structure.name,
     quartersHeld: 0,
     improvements: [],
-    risk: clamp(company.risk + terms.structure.risk, 5, 88),
+    risk: clamp(company.risk + terms.structure.risk + (diligenceStatus(company.id).hiddenRisk || 0) + currentThesis().risk, 5, 88),
+    growth: Math.max(0, company.growth + (thesisFit(company) ? currentThesis().growth : 0)),
     status: terms.dealDebt > 0 ? "LBO em integração" : "Em crescimento",
   });
   state.market = state.market.filter((item) => item.id !== id);
-  state.reputation = Math.min(5, state.reputation + 0.08);
+  adjustReputation("banks", terms.dealDebt > 0 ? 0.05 : 0.01);
+  adjustReputation("founders", company.status === "Proprietário" ? 0.09 : 0.03);
   log(`Aquisição concluída: ${company.name} via ${terms.structure.name}. Equity: ${money(terms.equityCheck)} | Loan: ${money(terms.dealDebt)} | Participação: ${pct(terms.structure.stake)}.`);
   render();
 }
@@ -318,15 +616,15 @@ function buyCompany(id, debtPct) {
 function takeLoan(id) {
   const facility = debtFacilities.find((item) => item.id === id);
   const leverage = state.debt / Math.max(1, nav());
-  if (leverage > 0.7 && facility.covenant > 50) {
+  if (leverage > 0.7 && facility.covenant > 50 && reputation("banks") < 4) {
     log(`Comitê recusou ${facility.name}: alavancagem já está elevada.`);
     render();
     return;
   }
   state.cash += facility.amount;
   state.debt += facility.amount;
-  state.debtRate = (state.debtRate + facility.rate) / 2;
-  state.reputation = Math.max(1, state.reputation - facility.covenant / 650);
+  state.debtRate = (state.debtRate + facility.rate - (reputation("banks") - 3) * 0.4) / 2;
+  adjustReputation("banks", facility.covenant > 55 ? -0.08 : 0.02);
   log(`${facility.name} contratada: ${money(facility.amount)} a ${pct(facility.rate)} a.a.`);
   render();
 }
@@ -383,9 +681,10 @@ function improveCompany(companyId, improvementId) {
 function raiseCapital(id) {
   const program = lpPrograms.find((item) => item.id === id);
   const effects = fundEffects();
-  const score = state.reputation * 18 + effects.lp + state.lpMomentum + Math.max(0, grossIrr()) * 0.7;
-  if (state.reputation < program.reputation || score < program.difficulty) {
-    state.reputation = Math.max(1, state.reputation - 0.08);
+  const thesisBonus = currentThesis().lp;
+  const score = reputation("lps") * 18 + effects.lp + state.lpMomentum + thesisBonus + Math.max(0, grossIrr()) * 0.7;
+  if (reputation("lps") < program.reputation || score < program.difficulty) {
+    adjustReputation("lps", -0.08);
     log(`${program.name} não aprovaram o compromisso. Reputação, IRR ou cobertura de LPs ainda estão baixos.`);
     render();
     return;
@@ -395,7 +694,7 @@ function raiseCapital(id) {
   const called = Math.round(amount * 0.35);
   state.called += called;
   state.cash += called;
-  state.reputation = Math.min(5, state.reputation + 0.18);
+  adjustReputation("lps", 0.18);
   state.lpMomentum = Math.max(0, state.lpMomentum - 10);
   log(`Captação fechada com ${program.name}: ${money(amount)} comprometidos e ${money(called)} integralizados.`);
   render();
@@ -410,7 +709,7 @@ function runRoadshow() {
   }
   state.cash -= cost;
   state.lpMomentum = Math.min(34, state.lpMomentum + 12 + fundEffects().lp / 8);
-  state.reputation = Math.min(5, state.reputation + 0.05);
+  adjustReputation("lps", 0.05);
   log(`Roadshow concluído: tese de investimento ganhou tração com LPs. Momentum atual: ${fmt.format(state.lpMomentum)} pontos.`);
   render();
 }
@@ -425,7 +724,7 @@ function callCapital() {
   const amount = Math.min(160, available);
   state.called += amount;
   state.cash += amount;
-  state.reputation = Math.max(1, state.reputation - 0.03);
+  adjustReputation("lps", -0.03);
   log(`Chamada de capital realizada: ${money(amount)} integralizados pelos LPs.`);
   render();
 }
@@ -439,6 +738,7 @@ function exitCompany(id, route) {
   const distributed = proceeds * 0.55;
   state.cash += proceeds - distributed;
   state.distributions += distributed;
+  state.exits = [{ name: company.name, route, proceeds, moic, label: `${state.year} T${state.quarter}` }, ...(state.exits || [])].slice(0, 8);
   state.portfolio = state.portfolio.filter((item) => item.id !== id);
   state.reputation = Math.min(5, state.reputation + (moic > 1.8 ? 0.28 : moic > 1.1 ? 0.12 : -0.16));
   log(`${route} de ${company.name}: ${money(proceeds)} recebidos, MOIC ${fmt.format(moic)}x.`);
@@ -448,8 +748,18 @@ function exitCompany(id, route) {
 function ipoCompany(id, sellPct = 30) {
   const company = state.portfolio.find((item) => item.id === id);
   if (!company) return;
+  if (!company.ipoPrepared) {
+    log(`${company.name} precisa preparar IPO antes da oferta.`);
+    render();
+    return;
+  }
+  if ((company.lockup || 0) > 0) {
+    log(`${company.name} está em lock-up por ${company.lockup} trimestre(s).`);
+    render();
+    return;
+  }
   if (company.quartersHeld < 5) {
-    log(`${company.name} ainda precisa de pelo menos 5 trimestres de histórico para uma janela realista de IPO.`);
+    log(`${company.name} ainda precisa de 5 trimestres de histórico para IPO.`);
     render();
     return;
   }
@@ -463,22 +773,65 @@ function ipoCompany(id, sellPct = 30) {
   const investedSold = (company.equityInvested || company.invested) * sellPct / 100;
   state.cash += proceeds;
   state.distributions += proceeds * 0.35;
+  const moic = proceeds / Math.max(1, investedSold);
+  state.exits = [{ name: company.name, route: `IPO ${sellPct}%`, proceeds, moic, label: `${state.year} T${state.quarter}` }, ...(state.exits || [])].slice(0, 8);
   company.stake = Math.max(0, company.stake - soldStake);
   company.equityInvested = Math.max(0, (company.equityInvested || company.invested) - investedSold);
   company.invested = company.equityInvested;
   company.public = true;
   company.publicFloat = Math.min(85, (company.publicFloat || 0) + soldStake);
+  company.lockup = 2;
   company.ipoPrice = enterpriseValue(company) * ipoMultiplier;
   company.multiple = Math.max(4.5, company.multiple * (0.94 + ipoMultiplier * 0.08));
   company.risk = clamp(company.risk - 5, 5, 90);
   company.status = "Listada";
-  state.reputation = Math.min(5, state.reputation + (ipoMultiplier > 1 ? 0.18 : 0.04));
+  adjustReputation("public", ipoMultiplier > 1 ? 0.18 : 0.04);
   if (company.stake < 8) {
     state.portfolio = state.portfolio.filter((item) => item.id !== id);
     log(`IPO e saída quase total de ${company.name}: ${money(proceeds)} de liquidez, múltiplo de janela ${fmt.format(ipoMultiplier)}x.`);
   } else {
     log(`IPO de ${company.name}: venda parcial de ${pct(soldStake)} do capital gerou ${money(proceeds)}. Fundo manteve ${pct(company.stake)} e segue exposto ao mercado.`);
   }
+  render();
+}
+
+function prepareIPO(id) {
+  const company = state.portfolio.find((item) => item.id === id);
+  if (!company) return;
+  const cost = company.public ? 18 : 42;
+  if (!canAfford(cost)) {
+    log(`Caixa insuficiente para preparar IPO de ${company.name}.`);
+    render();
+    return;
+  }
+  state.cash -= cost;
+  company.ipoPrepared = true;
+  company.risk = clamp(company.risk - 4, 5, 90);
+  company.quality = clamp(company.quality + 5, 1, 100);
+  adjustReputation("public", 0.08);
+  log(`${company.name} preparada para IPO.`);
+  render();
+}
+
+function followOnCompany(id) {
+  const company = state.portfolio.find((item) => item.id === id);
+  if (!company || !company.public) return;
+  if ((company.lockup || 0) > 0) {
+    log(`${company.name} ainda está em lock-up.`);
+    render();
+    return;
+  }
+  const issuedStake = Math.min(12, company.stake * 0.18);
+  const proceeds = enterpriseValue(company) * issuedStake / 100 * 0.9;
+  state.cash += proceeds * 0.45;
+  state.distributions += proceeds * 0.25;
+  company.stake = Math.max(0, company.stake - issuedStake);
+  company.publicFloat = Math.min(90, (company.publicFloat || 0) + issuedStake);
+  company.growth += 3;
+  company.risk = clamp(company.risk + 2, 5, 90);
+  company.lockup = 1;
+  adjustReputation("public", 0.05);
+  log(`Follow-on de ${company.name}: ${money(proceeds)} levantados e participação diluída para ${pct(company.stake)}.`);
   render();
 }
 
@@ -529,8 +882,14 @@ function mergeCompany(portfolioId, targetId) {
 }
 
 function advanceQuarter() {
+  if (state.pendingDecision) {
+    log("Resolva a decisão de board antes de avançar.");
+    render();
+    return;
+  }
   const effects = fundEffects();
   const event = events[Math.floor(Math.random() * events.length)];
+  const sectorEvent = sectorEvents[Math.floor(Math.random() * sectorEvents.length)];
   state.event = event;
   const annualDebtCost = state.debt * Math.max(4, state.debtRate + (event.debtRate || 0)) / 100;
   const salaries = state.team.reduce((sum, id) => sum + personas.find((p) => p.id === id).salary, 0);
@@ -538,22 +897,25 @@ function advanceQuarter() {
   state.cash -= annualDebtCost / 4 + salaries + managementFee;
 
   state.portfolio.forEach((company) => {
+    const sectorImpact = company.sector === sectorEvent.sector ? sectorEvent : { growth: 0, multiple: 0, risk: 0 };
     const riskDrag = Math.max(0, company.risk + (event.risk || 0) + effects.risk) / 260;
     const growthBoost = company.profile && /Scale-up|Venture|Biotech|Healthtech|IA|Nicho|crescimento/i.test(company.profile) ? 1.22 : 1.08;
-    const growth = (company.growth * growthBoost + effects.ops / 8 + (event.growth || 0)) / 100;
+    const maturityDrag = company.revenue > 650 ? 0.72 : company.revenue > 250 ? 0.88 : 1;
+    const growth = (company.growth * growthBoost * maturityDrag + effects.ops / 8 + (event.growth || 0) + sectorImpact.growth) / 100;
     const companyEbitdaBefore = ebitda(company);
     const companyInterest = (company.dealDebt || 0) * Math.max(4, (company.debtRate || 0) + (event.debtRate || 0)) / 100 / 4;
     const dscr = companyInterest > 0 ? companyEbitdaBefore / 4 / companyInterest : 9;
     company.revenue = Math.max(20, company.revenue * (1 + growth / 3.2 - riskDrag / 6));
     company.ebitdaMargin = Math.max(4, company.ebitdaMargin + effects.ops / 145 + Math.max(-0.2, growth * 2.2) - riskDrag * 0.45 - (dscr < 1.35 ? 0.35 : 0));
-    company.multiple = Math.max(4.5, company.multiple + (event.multiple || 0) + (company.quality - 70) / 520 + Math.max(-0.08, growth * 0.8) - riskDrag / 2.6);
+    company.multiple = Math.max(4.5, company.multiple + (event.multiple || 0) + sectorImpact.multiple + (company.quality - 70) / 520 + Math.max(-0.08, growth * 0.8) - riskDrag / 2.6);
     if (company.public) {
       const marketSwing = (Math.random() - 0.45) * (company.risk > 55 ? 0.9 : 0.45);
       company.multiple = Math.max(4.2, company.multiple + marketSwing + (event.title === "Janela de IPO abriu" ? 0.35 : 0));
     }
-    company.risk = clamp(company.risk + (event.risk || 0) / 2 - effects.risk / 12 + (dscr < 1.25 ? 5 : 0), 5, 90);
+    company.risk = clamp(company.risk + (event.risk || 0) / 2 + sectorImpact.risk - effects.risk / 12 + (dscr < 1.25 ? 5 : 0), 5, 90);
     const amortization = Math.min(company.dealDebt || 0, Math.max(0, companyEbitdaBefore * 0.055 - companyInterest * 0.35));
     company.dealDebt = Math.max(0, (company.dealDebt || 0) - amortization);
+    company.lockup = Math.max(0, (company.lockup || 0) - 1);
     company.quartersHeld += 1;
   });
 
@@ -567,6 +929,10 @@ function advanceQuarter() {
   if (state.market.length < 6) {
     addNewDeal();
   }
+  state.market = state.market.map((company) => ({
+    ...company,
+    competition: clamp((company.competition || 0) + (Math.random() - 0.45) * 0.035 + (thesisFit(company) ? -0.01 : 0.012), 0, 0.18),
+  }));
 
   const debtToNav = totalDebt() / Math.max(1, nav());
   if (debtToNav > 1.35 || state.cash < 10) {
@@ -582,6 +948,14 @@ function advanceQuarter() {
     state.gameOver = "Mandato encerrado com desempenho de primeira prateleira.";
   }
 
+  if (state.portfolio.some((company) => company.sector === sectorEvent.sector)) {
+    log(`${sectorEvent.title}: impacto direto em ${sectorEvent.sector}.`);
+  }
+  if (state.portfolio.length) {
+    const company = state.portfolio[Math.floor(Math.random() * state.portfolio.length)];
+    state.pendingDecision = { companyId: company.id };
+    log(`Decisão de board pendente em ${company.name}.`);
+  }
   log(`${event.title}: ${event.text}`);
   state.quarter += 1;
   if (state.quarter > 4) {
@@ -597,7 +971,9 @@ function recordNavHistory() {
 }
 
 function addNewDeal() {
-  const base = marketSeed[Math.floor(Math.random() * marketSeed.length)];
+  const thesisDeals = marketSeed.filter((company) => currentThesis().sectors.includes(company.sector));
+  const pool = Math.random() < 0.62 && thesisDeals.length ? thesisDeals : marketSeed;
+  const base = pool[Math.floor(Math.random() * pool.length)];
   const suffix = ["Nacional", "Prime", "Digital", "Brasil", "Labs"][Math.floor(Math.random() * 5)];
   const id = `${base.id}-${Date.now()}`;
   state.market.push({
@@ -607,14 +983,15 @@ function addNewDeal() {
     revenue: Math.round(base.revenue * (0.75 + Math.random() * 0.6)),
     risk: Math.max(18, Math.round(base.risk + Math.random() * 18 - 8)),
     quality: Math.max(58, Math.round(base.quality + Math.random() * 14 - 7)),
+    growth: Math.max(3, Math.round(base.growth + Math.random() * 10 - 4)),
+    competition: clamp(Math.random() * 0.1 + (base.status === "Competitivo" ? 0.05 : 0), 0, 0.18),
     status: fundEffects().sourcing > 20 ? "Proprietário" : "Novo",
   });
 }
 
 function resetGame() {
-  state = clone(initialState);
-  saveState();
-  render();
+  setupDraft = { name: "", thesis: "buyout" };
+  showScreen("setup");
 }
 
 function kpiClass(value, good, bad) {
@@ -624,8 +1001,13 @@ function kpiClass(value, good, bad) {
 }
 
 function render() {
-  saveState();
   const app = document.querySelector("#app");
+  app.className = screen === "game" ? "app-shell" : "entry-shell";
+  if (screen !== "game") {
+    app.innerHTML = renderWelcome();
+    return;
+  }
+  saveState();
   app.innerHTML = `
     ${renderTopbar()}
     ${renderSidebar()}
@@ -644,8 +1026,8 @@ function renderTopbar() {
       <div class="kpi ${kpiClass(state.cash, 220, 50)}"><label>Caixa</label><strong>${money(state.cash)}</strong><small>${money(availableCommitment())} não chamado</small></div>
       <div class="kpi ${kpiClass(nav(), 1200, 420)}"><label>NAV</label><strong>${money(nav())}</strong><small>Valor líquido do fundo</small></div>
       <div class="kpi ${debtNav > 120 ? "bad" : debtNav > 70 ? "warn" : ""}"><label>Dívida total</label><strong>${money(totalDebt())}</strong><small>${pct(debtNav)} do NAV</small></div>
-      <div class="kpi ${kpiClass(grossIrr(), 18, 8)}"><label>IRR bruto</label><strong>${pct(grossIrr())}</strong><small>Desde o início</small></div>
-      <div class="kpi ${kpiClass(state.reputation, 4, 2.5)}"><label>Reputação</label><strong>${fmt.format(state.reputation)} / 5</strong><small>Institucional</small></div>
+      <div class="kpi ${kpiClass(grossIrr(), 18, 8)}"><label>IRR bruto</label><strong>${pct(grossIrr())}</strong><small>TVPI ${fmt.format(tvpi())}x</small></div>
+      <div class="kpi ${kpiClass(state.reputation, 4, 2.5)}"><label>Reputação</label><strong>${fmt.format(state.reputation)} / 5</strong><small>DPI ${fmt.format(dpi())}x</small></div>
       <div class="kpi"><label>Ano</label><strong>${state.year}</strong><small>${state.quarter}º trimestre</small></div>
     </header>
   `;
@@ -660,7 +1042,8 @@ function renderSidebar() {
       </nav>
       <section class="fund-card">
         <h2>Resumo do fundo</h2>
-        <div class="fund-stat"><span class="muted">Nome do fundo</span><strong>${state.fundName}</strong></div>
+        <div class="fund-stat"><span class="muted">Tese</span><strong>${currentThesis().name}</strong></div>
+        <div class="fund-stat"><span class="muted">Nome do fundo</span><strong>${escapeHtml(state.fundName)}</strong></div>
         <div class="fund-stat"><span class="muted">Capital comprometido</span><strong>${money(state.committed)}</strong></div>
         <div class="fund-stat"><span class="muted">Capital integralizado</span><strong>${money(state.called)} (${pct(state.called / state.committed * 100)})</strong></div>
         <div class="fund-stat"><span class="muted">Período do fundo</span><strong>Ano ${Math.max(1, state.year - 2026)} de 10</strong></div>
@@ -691,8 +1074,14 @@ function renderMarket() {
   return `
     <div class="section-tabs"><button class="active">Pipeline</button><button onclick="setTab('lps')">Capital com LPs</button><button onclick="setTab('operacoes')">Dívida e M&A</button></div>
     ${renderNavDashboard()}
+    <section class="panel thesis-panel">
+      <h2>Tese do fundo</h2>
+      <div class="choice-row">
+        ${fundTheses.map((thesis) => `<button class="${state.thesis === thesis.id ? "primary" : ""}" onclick="setThesis('${thesis.id}')">${thesis.name}</button>`).join("")}
+      </div>
+    </section>
     <section class="panel">
-      <div class="toolbar"><h2>Empresas alvo em análise</h2><span class="muted">Compre participações de controle, depois crie valor e faça saídas.</span></div>
+      <div class="toolbar"><h2>Empresas alvo em análise</h2></div>
       <div class="cards">
         ${state.market.map(renderDealCard).join("")}
       </div>
@@ -716,7 +1105,7 @@ function renderNavDashboard() {
   return `
     <section class="panel dashboard-panel">
       <div class="toolbar">
-        <div><h2>Dashboard do fundo</h2><span class="muted">Evolução de NAV, liquidez e alavancagem para orientar o próximo trimestre.</span></div>
+        <div><h2>Dashboard do fundo</h2></div>
         <span class="tag ${navChange >= 0 ? "teal" : "bad"}">${navChange >= 0 ? "+" : ""}${money(navChange)} desde o início do gráfico</span>
       </div>
       <div class="dashboard-grid">
@@ -733,6 +1122,7 @@ function renderNavDashboard() {
           <div><span>Dívida total</span><strong>${money(totalDebt())}</strong></div>
           <div><span>Capital não chamado</span><strong>${money(availableCommitment())}</strong></div>
           <div><span>Alertas de covenant</span><strong>${state.covenantWarnings}/3</strong></div>
+          <div><span>Carry estimado</span><strong>${money(carryAccrued())}</strong></div>
         </div>
       </div>
     </section>
@@ -743,9 +1133,14 @@ function renderDealCard(company) {
   const debtPct = getDealDebtPct(company);
   const terms = dealTerms(company, debtPct);
   const riskClass = company.risk > 58 ? "bad" : company.risk > 35 ? "warn" : "teal";
+  const diligence = diligenceStatus(company.id);
   return `
     <article class="deal-card">
       <div class="deal-head"><div><h3>${company.name}</h3><span class="muted">${company.sector} | ${company.profile || "Tese tradicional"}</span></div><span class="tag ${riskClass}">${company.status}</span></div>
+      <div class="tag-row">
+        <span class="tag ${thesisFit(company) ? "teal" : "warn"}">${thesisFit(company) ? "Aderente" : "Fora da tese"}</span>
+        <span class="tag ${diligence.level >= 2 ? "teal" : "warn"}">Diligência ${diligence.level}/3</span>
+      </div>
       <div class="stats">
         <div><span>Receita</span><strong>${money(company.revenue)}</strong></div>
         <div><span>EBITDA</span><strong>${money(ebitda(company))}</strong></div>
@@ -753,6 +1148,7 @@ function renderDealCard(company) {
         <div><span>Crescimento anual</span><strong class="${company.growth > 35 ? "good" : ""}">${pct(company.growth)}</strong></div>
         <div><span>Múltiplo EV/EBITDA</span><strong>${fmt.format(company.multiple)}x</strong></div>
         <div><span>Enterprise value</span><strong>${money(enterpriseValue(company))}</strong></div>
+        <div><span>Competição</span><strong>${pct((company.competition || 0) * 100)}</strong></div>
         <div><span>Risco</span><strong class="${company.risk > 45 ? "bad" : company.risk > 32 ? "warn" : "good"}">${pct(company.risk)}</strong></div>
       </div>
       <div class="deal-builder">
@@ -765,6 +1161,7 @@ function renderDealCard(company) {
           <span>Participação <strong>${pct(terms.structure.stake)}</strong></span>
         </div>
         <button class="primary" onclick="buyCompany('${company.id}', ${debtPct})" ${state.cash < terms.equityCheck ? "disabled" : ""}>Comprar com essa estrutura</button>
+        <button onclick="runDiligence('${company.id}')" ${diligence.level >= 3 || state.cash < 10 ? "disabled" : ""}>Due diligence</button>
       </div>
     </article>
   `;
@@ -772,11 +1169,11 @@ function renderDealCard(company) {
 
 function renderPortfolio() {
   if (!state.portfolio.length) {
-    return `<section class="panel"><h2>Portfólio</h2><div class="empty">Você ainda não comprou empresas. Vá ao Mercado para adquirir a primeira plataforma.</div></section>`;
+    return `<section class="panel"><h2>Portfólio</h2><div class="empty">Sem empresas no portfólio.</div></section>`;
   }
   return `
     <section class="panel">
-      <div class="toolbar"><h2>Empresas do portfólio</h2><span class="muted">Gerencie crescimento, risco, melhorias e saídas.</span></div>
+      <div class="toolbar"><h2>Empresas do portfólio</h2></div>
       ${state.portfolio.map(renderCompanyRow).join("")}
     </section>
   `;
@@ -807,9 +1204,11 @@ function renderCompanyRow(company) {
           <div class="progress" title="Qualidade do ativo"><span style="width:${company.quality}%"></span></div>
         </div>
         <div class="span-4">
+          <button onclick="prepareIPO('${company.id}')" ${company.ipoPrepared || company.quartersHeld < 4 ? "disabled" : ""}>Preparar IPO</button>
           <button onclick="exitCompany('${company.id}', 'Venda estratégica')">Venda estratégica</button>
           <button onclick="ipoCompany('${company.id}', 25)" ${company.quartersHeld < 5 ? "disabled" : ""}>IPO: vender 25%</button>
           <button onclick="ipoCompany('${company.id}', 50)" ${company.quartersHeld < 5 ? "disabled" : ""}>IPO: vender 50%</button>
+          <button onclick="followOnCompany('${company.id}')" ${!company.public || company.lockup > 0 ? "disabled" : ""}>Follow-on</button>
         </div>
       </div>
     </article>
@@ -824,7 +1223,6 @@ function renderTeam() {
         ${personas.map((person) => `
           <article class="action-card">
             <h3>${person.name}</h3>
-            <p class="muted">${person.text}</p>
             <div class="stats">
               <div><span>Bônus de origem</span><strong>${person.sourcing}</strong></div>
               <div><span>Bônus operacional</span><strong>${person.ops}</strong></div>
@@ -849,7 +1247,6 @@ function renderInfra() {
         ${infrastructure.map((item) => `
           <article class="action-card">
             <h3>${item.name}</h3>
-            <p class="muted">${item.text}</p>
             <div class="metric-line"><span>Investimento</span><strong>${money(item.cost)}</strong></div>
             <button onclick="buyInfra('${item.id}')" ${state.infra.includes(item.id) || state.cash < item.cost ? "disabled" : ""}>${state.infra.includes(item.id) ? "Implantado" : "Implantar"}</button>
           </article>
@@ -868,7 +1265,7 @@ function renderLPs() {
           ${lpPrograms.map((program) => `
             <article class="action-card">
               <h3>${program.name}</h3>
-              <p class="muted">Exige reputação mínima de ${fmt.format(program.reputation)} e tese consistente.</p>
+              <div class="metric-line"><span>Reputação mínima</span><strong>${fmt.format(program.reputation)}</strong></div>
               <div class="metric-line"><span>Potencial comprometido</span><strong>${money(program.target)}</strong></div>
               <button onclick="raiseCapital('${program.id}')">Abrir captação</button>
             </article>
@@ -895,7 +1292,7 @@ function renderOperations() {
     <div class="grid">
       <section class="panel span-6">
         <h2>Pegar empréstimo</h2>
-        <div class="toolbar"><span class="muted">Use alavancagem para aquisições, mas mantenha covenants sob controle.</span><button onclick="repayDebt()" ${state.debt <= 0 || state.cash <= 0 ? "disabled" : ""}>Amortizar dívida</button></div>
+        <div class="toolbar"><button onclick="repayDebt()" ${state.debt <= 0 || state.cash <= 0 ? "disabled" : ""}>Amortizar dívida</button></div>
         <div class="cards">
           ${debtFacilities.map((facility) => `
             <article class="action-card">
@@ -912,7 +1309,7 @@ function renderOperations() {
       </section>
       <section class="panel span-6">
         <h2>Melhorias e M&A</h2>
-        ${state.portfolio.length ? renderImprovementControls() : `<div class="empty">Compre uma empresa para liberar melhorias operacionais e aquisições add-on.</div>`}
+        ${state.portfolio.length ? renderImprovementControls() : `<div class="empty">Sem empresas no portfólio.</div>`}
       </section>
     </div>
   `;
@@ -947,13 +1344,32 @@ function renderReport() {
     const invested = company.equityInvested || company.invested;
     return `<tr><td>${company.name}</td><td>${company.sector}</td><td>${company.structure || "Equity majoritário"}</td><td>${money(invested)}</td><td>${money(company.dealDebt || 0)}</td><td>${money(value)}</td><td>${fmt.format(value / Math.max(1, invested))}x</td><td>${pct(company.growth)}</td><td>${pct(company.risk)}</td></tr>`;
   }).join("");
+  const exits = (state.exits || []).map((exit) => `<tr><td>${exit.name}</td><td>${exit.route}</td><td>${exit.label}</td><td>${money(exit.proceeds)}</td><td>${fmt.format(exit.moic)}x</td></tr>`).join("");
   return `
+    <section class="panel dashboard-panel">
+      <h2>Métricas do fundo</h2>
+      <div class="dashboard-metrics metric-grid">
+        <div><span>TVPI</span><strong>${fmt.format(tvpi())}x</strong></div>
+        <div><span>DPI</span><strong>${fmt.format(dpi())}x</strong></div>
+        <div><span>Carry estimado</span><strong>${money(carryAccrued())}</strong></div>
+        <div><span>Distribuições</span><strong>${money(state.distributions)}</strong></div>
+      </div>
+    </section>
     <section class="panel">
       <h2>Relatório do comitê</h2>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Empresa</th><th>Setor</th><th>Estrutura</th><th>Equity</th><th>Dívida</th><th>Valor atual</th><th>MOIC</th><th>Crescimento</th><th>Risco</th></tr></thead>
           <tbody>${rows || `<tr><td colspan="9">Sem ativos no portfólio.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel" style="margin-top: 14px;">
+      <h2>Saídas realizadas</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Empresa</th><th>Rota</th><th>Data</th><th>Liquidez</th><th>MOIC</th></tr></thead>
+          <tbody>${exits || `<tr><td colspan="5">Sem saídas realizadas.</td></tr>`}</tbody>
         </table>
       </div>
     </section>
@@ -977,6 +1393,7 @@ function renderRightbar() {
   const leverage = totalDebt() / Math.max(1, nav());
   return `
     <aside class="rightbar">
+      ${renderBoardPanel()}
       <section class="side-panel">
         <h2>Pauta do comitê</h2>
         <div class="stats">
@@ -984,6 +1401,15 @@ function renderRightbar() {
           <div><span>Originação</span><strong>${effects.sourcing}</strong></div>
           <div><span>Operações</span><strong>${effects.ops}</strong></div>
           <div><span>LPs</span><strong>${effects.lp}</strong></div>
+        </div>
+      </section>
+      <section class="side-panel">
+        <h2>Reputações</h2>
+        <div class="stats">
+          <div><span>LPs</span><strong>${fmt.format(reputation("lps"))}</strong></div>
+          <div><span>Bancos</span><strong>${fmt.format(reputation("banks"))}</strong></div>
+          <div><span>Fundadores</span><strong>${fmt.format(reputation("founders"))}</strong></div>
+          <div><span>Mercado público</span><strong>${fmt.format(reputation("public"))}</strong></div>
         </div>
       </section>
       <section class="side-panel">
@@ -1002,6 +1428,26 @@ function renderRightbar() {
   `;
 }
 
+function renderBoardPanel() {
+  if (!state.pendingDecision) {
+    return `
+      <section class="side-panel">
+        <h2>Board</h2>
+        <div class="empty">Sem decisão pendente.</div>
+      </section>
+    `;
+  }
+  const company = state.portfolio.find((item) => item.id === state.pendingDecision.companyId);
+  return `
+    <section class="side-panel">
+      <h2>Board${company ? `: ${company.name}` : ""}</h2>
+      <div class="decision-grid">
+        ${boardDecisions.map((decision) => `<button onclick="chooseBoardDecision('${decision.id}')">${decision.name}</button>`).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderFooter() {
   return `
     <footer class="footer">
@@ -1012,6 +1458,8 @@ function renderFooter() {
         <span>Último evento: ${state.event ? state.event.title : "Nenhum"}</span>
       </div>
       <div>
+        <button onclick="showScreen('home')">Início</button>
+        <button onclick="showRules()">Regras</button>
         <button onclick="resetGame()">Reiniciar</button>
         <button class="primary" onclick="advanceQuarter()">Avançar trimestre</button>
       </div>
